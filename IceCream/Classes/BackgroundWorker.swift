@@ -17,10 +17,14 @@ class BackgroundWorker: NSObject {
     
     private var thread: Thread?
     private var block: (() -> Void)?
-    
+    private let lock = NSLock()
+
     func start(_ block: @escaping () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+
         self.block = block
-        
+
         if thread == nil {
             thread = Thread { [weak self] in
                 guard let self = self, let th = self.thread else {
