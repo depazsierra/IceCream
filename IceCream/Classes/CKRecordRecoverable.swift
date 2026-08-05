@@ -9,7 +9,15 @@ import CloudKit
 import RealmSwift
 
 public protocol CKRecordRecoverable {
-    
+    /// Called after parsing a CKRecord when non-optional properties had no value
+    /// in the record (e.g. records last written by an older app version whose
+    /// schema predates the property). The object is unmanaged at this point, so
+    /// implementations can adjust the Realm defaults before the object is saved.
+    func resolveMissingRecordKeys(_ missingKeys: Set<String>)
+}
+
+public extension CKRecordRecoverable {
+    func resolveMissingRecordKeys(_ missingKeys: Set<String>) { }
 }
 
 extension CKRecordRecoverable where Self: Object {
@@ -22,6 +30,7 @@ extension CKRecordRecoverable where Self: Object {
         pendingWTypeRelationshipsWorker: PendingRelationshipsWorker<W>
     ) -> Self? {
         let o = Self()
+        var missingKeys = Set<String>()
         for prop in o.objectSchema.properties {
             var recordValue: Any?
             
@@ -153,7 +162,12 @@ extension CKRecordRecoverable where Self: Object {
             }
             if recordValue != nil || (recordValue == nil && prop.isOptional) {
                 o.setValue(recordValue, forKey: prop.name)
+            } else {
+                missingKeys.insert(prop.name)
             }
+        }
+        if !missingKeys.isEmpty {
+            o.resolveMissingRecordKeys(missingKeys)
         }
         return o
     }
