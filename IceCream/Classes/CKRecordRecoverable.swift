@@ -14,10 +14,19 @@ public protocol CKRecordRecoverable {
     /// schema predates the property). The object is unmanaged at this point, so
     /// implementations can adjust the Realm defaults before the object is saved.
     func resolveMissingRecordKeys(_ missingKeys: Set<String>)
+
+    /// Called before each scalar value parsed from a CKRecord is set on the
+    /// object. Return the value to store, a replacement, or nil to leave the
+    /// property at its Realm default. Needed for values the local schema
+    /// cannot represent — e.g. a PersistableEnum raw value written by a newer
+    /// app version, which `setValue(_:forKey:)` turns into a fatal
+    /// RLMException ("Could not convert value ... to type ...").
+    func sanitizedRecordValue(_ value: Any, forKey key: String) -> Any?
 }
 
 public extension CKRecordRecoverable {
     func resolveMissingRecordKeys(_ missingKeys: Set<String>) { }
+    func sanitizedRecordValue(_ value: Any, forKey key: String) -> Any? { value }
 }
 
 extension CKRecordRecoverable where Self: Object {
@@ -160,8 +169,13 @@ extension CKRecordRecoverable where Self: Object {
             default:
                 print("Other types will be supported in the future.")
             }
-            if recordValue != nil || (recordValue == nil && prop.isOptional) {
-                o.setValue(recordValue, forKey: prop.name)
+            if let value = recordValue {
+                if let sanitized = o.sanitizedRecordValue(value, forKey: prop.name) {
+                    o.setValue(sanitized, forKey: prop.name)
+                }
+                // nil from the hook: keep the Realm default for this property
+            } else if prop.isOptional {
+                o.setValue(nil, forKey: prop.name)
             } else {
                 missingKeys.insert(prop.name)
             }
